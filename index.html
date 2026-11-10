@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1a237e">
+<title>SRK Inter College</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui,Arial,sans-serif}
+body{background:#eef1f7;color:#222;padding-bottom:70px}
+header{background:#1a237e;color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+header h1{font-size:18px}header small{display:block;font-size:12px;opacity:.8}
+header button{background:#fff;color:#1a237e;border:0;padding:6px 12px;border-radius:6px;font-weight:600}
+main{padding:14px;max-width:700px;margin:auto}
+.card{background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px #0002}
+.card h3{margin-bottom:8px;color:#1a237e;font-size:16px}
+input,select,textarea{width:100%;padding:11px;margin:5px 0 10px;border:1px solid #c5cae9;border-radius:8px;font-size:15px}
+button.btn{background:#1a237e;color:#fff;border:0;padding:11px 16px;border-radius:8px;font-size:15px;width:100%;font-weight:600}
+button.sm{width:auto;padding:6px 12px;font-size:13px}
+button.red{background:#c62828}
+button.link{background:none;border:0;color:#1a237e;text-decoration:underline;width:100%;margin-top:12px;font-size:14px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #ccc;overflow-x:auto}
+nav button{flex:1;min-width:72px;border:0;background:none;padding:10px 4px;font-size:12px;color:#555}
+nav button.on{color:#1a237e;font-weight:700;border-top:3px solid #1a237e}
+nav button span{display:block;font-size:20px}
+.row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #eee;gap:8px}
+.row:last-child{border:0}
+.P{background:#2e7d32}.A{background:#c62828}
+.tg{display:flex;gap:6px}
+.tg button{border:2px solid #bbb;background:#fff;border-radius:8px;padding:6px 14px;font-weight:700}
+.tg button.selP{background:#2e7d32;color:#fff;border-color:#2e7d32}
+.tg button.selA{background:#c62828;color:#fff;border-color:#c62828}
+.badge{color:#fff;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:700}
+.stat{display:flex;gap:10px}.stat div{flex:1;background:#e8eaf6;border-radius:10px;padding:12px;text-align:center}
+.stat b{display:block;font-size:22px;color:#1a237e}
+.login{max-width:380px;margin:40px auto;padding:20px}
+.logo{text-align:center;margin-bottom:20px}
+.logo div{font-size:54px}.logo h2{color:#1a237e}
+.err{color:#c62828;font-size:14px;margin-bottom:8px}
+.muted{color:#777;font-size:13px}
+</style>
+</head>
+<body>
+<div id="app"><p style="padding:30px;text-align:center">Loading...</p></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ====== YAHAN APNA FIREBASE CONFIG PASTE KAREIN (SETUP.txt dekhein) ======
+const firebaseConfig = {
+  apiKey: "AIzaSyArprYetd4WbX8keoke4TnD3RHqHC7LsEg",
+  authDomain: "srk-inter-college-53859.firebaseapp.com",
+  projectId: "srk-inter-college-53859",
+  storageBucket: "srk-inter-college-53859.firebasestorage.app",
+  messagingSenderId: "571396907260",
+  appId: "1:571396907260:web:dd2538f831ab2db9077779",
+  measurementId: "G-8LQ006HNGQ"
+};
+// =========================================================================
+
+const SCHOOL="SRK Inter College";
+const CLASSES=["6","7","8","9","10","11","12"];
+const DOMAIN="@srk.school";
+const today=()=>{const d=new Date();return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $=id=>document.getElementById(id);
+
+if(firebaseConfig.apiKey==="YOUR_API_KEY"){
+  document.getElementById("app").innerHTML='<div class="card login"><h3>Setup baaki hai</h3><p>File me firebaseConfig paste karna zaroori hai. SETUP.txt dekhein.</p></div>';
+  throw new Error("Firebase config missing");
+}
+firebase.initializeApp(firebaseConfig);
+const auth=firebase.auth(), db=firebase.firestore();
+
+let me=null, setupDone=true, err="", tab="home", selCls="10", selDate=today(), showSetup=false, busy=false;
+let D={students:[],notices:[],events:[],homework:[],users:[],att:{}};
+let unsubs=[];
+
+function startListeners(){
+  stopListeners();
+  const sub=(q,fn)=>unsubs.push(q.onSnapshot(s=>{fn(s);render()},e=>console.error(e)));
+  const list=s=>s.docs.map(d=>({id:d.id,...d.data()}));
+  sub(db.collection("students"),s=>D.students=list(s).sort((a,b)=>(a.roll||0)-(b.roll||0)));
+  sub(db.collection("notices"),s=>D.notices=list(s).sort((a,b)=>b.ts-a.ts));
+  sub(db.collection("events"),s=>D.events=list(s).sort((a,b)=>b.ts-a.ts));
+  sub(db.collection("homework"),s=>D.homework=list(s).sort((a,b)=>b.ts-a.ts));
+  sub(db.collection("attendance"),s=>{D.att={};s.docs.forEach(d=>D.att[d.id]=d.data())});
+  if(me.role==="admin")sub(db.collection("users"),s=>D.users=list(s));
+}
+function stopListeners(){unsubs.forEach(u=>u());unsubs=[]}
+
+auth.onAuthStateChanged(async u=>{
+  if(u){
+    try{
+      const d=await db.collection("users").doc(u.uid).get();
+      if(!d.exists){err="Is account ka profile nahi mila";await auth.signOut();return}
+      me={uid:u.uid,...d.data()};tab="home";startListeners();
+    }catch(e){err="Profile load nahi hua: "+e.message;await auth.signOut();return}
+  }else{me=null;stopListeners()}
+  try{setupDone=(await db.collection("meta").doc("setup").get()).exists}catch(e){setupDone=true}
+  render();
+});
+
+async function login(){
+  const u=$("lu").value.trim().toLowerCase(),p=$("lp").value;
+  if(!u||!p){err="Username aur password bharein";return render()}
+  err="";busy=true;render();
+  try{await auth.signInWithEmailAndPassword(u+DOMAIN,p)}
+  catch(e){err="Username ya password galat hai";busy=false;render()}
+  busy=false;
+}
+async function firstSetup(){
+  const n=$("sn").value.trim(),u=$("su").value.trim().toLowerCase(),p=$("sp").value;
+  if(!n||!u||p.length<6){err="Sab bharein (password kam se kam 6 akshar)";return render()}
+  try{
+    const c=await auth.createUserWithEmailAndPassword(u+DOMAIN,p);
+    await db.collection("users").doc(c.user.uid).set({name:n,username:u,role:"admin"});
+    await db.collection("meta").doc("setup").set({done:true});
+    showSetup=false;err="";
+  }catch(e){err=e.message;render()}
+}
+function logout(){auth.signOut()}
+
+function tabsFor(){
+  if(me.role==="parent")return[["home","🏠","Home"],["att","📋","Attendance"],["hw","📚","Homework"],["notice","📢","Notices"],["event","🎉","Events"]];
+  if(me.role==="teacher")return[["home","🏠","Home"],["mark","✅","Attendance"],["hw","📚","Homework"],["notice","📢","Notices"],["event","🎉","Events"]];
+  return[["home","🏠","Home"],["mark","✅","Attendance"],["stu","👨‍🎓","Students"],["hw","📚","Homework"],["notice","📢","Notices"],["event","🎉","Events"],["acc","🔑","Accounts"]];
+}
+
+function render(){
+  const ae=document.activeElement;
+  if(me&&ae&&["INPUT","TEXTAREA","SELECT"].includes(ae.tagName)&&ae.closest("main")&&ae.value!=="")return; // typing me re-render na ho
+  const a=$("app");
+  if(!me){
+    if(showSetup&&!setupDone){
+      a.innerHTML=`<div class="login card"><div class="logo"><div>🏫</div><h2>${SCHOOL}</h2><p class="muted">Pehla Admin Account</p></div>
+      <input id="sn" placeholder="Naam (jaise Principal)"><input id="su" placeholder="Username" autocapitalize="none"><input id="sp" type="password" placeholder="Password (min 6)">
+      ${err?`<div class="err">${esc(err)}</div>`:""}<button class="btn" onclick="firstSetup()">Admin Banayein</button>
+      <button class="link" onclick="showSetup=false;err='';render()">Wapas</button></div>`;return}
+    a.innerHTML=`<div class="login card"><div class="logo"><div>🏫</div><h2>${SCHOOL}</h2><p class="muted">School Management App</p></div>
+    <label>Username</label><input id="lu" autocomplete="username" autocapitalize="none">
+    <label>Password</label><input id="lp" type="password" autocomplete="current-password">
+    ${err?`<div class="err">${esc(err)}</div>`:""}
+    <button class="btn" onclick="login()" ${busy?"disabled":""}>${busy?"Please wait...":"Login"}</button>
+    ${setupDone?"":`<button class="link" onclick="showSetup=true;err='';render()">Pehli baar setup: Admin banayein</button>`}</div>`;
+    return;
+  }
+  a.innerHTML=`<header><div><h1>🏫 ${SCHOOL}</h1><small>${esc(me.name)} (${me.role})</small></div><button onclick="logout()">Logout</button></header>
+  <main>${view()}</main>
+  <nav>${tabsFor().map(x=>`<button class="${tab===x[0]?"on":""}" onclick="tab='${x[0]}';render()"><span>${x[1]}</span>${x[2]}</button>`).join("")}</nav>`;
+}
+
+function pct(sid,cls){
+  let p=0,t=0;
+  for(const k in D.att){const d=D.att[k];if(d.cls!==cls)continue;const v=(d.rec||{})[sid];if(v){t++;if(v==="P")p++}}
+  return{p,a:t-p,pc:t?Math.round(p/t*100):0};
+}
+function listNotices(n,edit){
+  return`<div class="card"><h3>📢 Notices</h3>${D.notices.slice(0,n).map(x=>`<div class="row"><div><b>${esc(x.title)}</b> <span class="muted">${x.date}</span><br>${esc(x.text)}</div>${edit?`<button class="btn sm red" onclick="del('notices','${x.id}')">X</button>`:""}</div>`).join("")||'<p class="muted">Koi notice nahi.</p>'}</div>`}
+
+function view(){
+  const isP=me.role==="parent",canEdit=!isP;
+  const stu=isP?D.students.find(s=>s.id===me.sid):null;
+  if(isP&&!stu&&tab!=="notice"&&tab!=="event")return'<div class="card"><p>Aapke bachche ka record abhi school ne link nahi kiya.</p></div>';
+  if(tab==="home"){
+    if(isP){const s=pct(stu.id,stu.cls);
+      return`<div class="card"><h3>${esc(stu.name)}</h3><p class="muted">Class ${stu.cls} · Roll ${stu.roll}</p></div>
+      <div class="card"><h3>Attendance</h3><div class="stat"><div><b>${s.p}</b>Present</div><div><b>${s.a}</b>Absent</div><div><b>${s.pc}%</b>Total</div></div></div>`+listNotices(3)}
+    return`<div class="card"><h3>Dashboard</h3><div class="stat"><div><b>${D.students.length}</b>Students</div><div><b>${D.notices.length}</b>Notices</div><div><b>${D.events.length}</b>Events</div></div></div>`+listNotices(3)}
+  if(tab==="att"&&isP){
+    const rows=Object.values(D.att).filter(d=>d.cls===stu.cls&&d.rec&&d.rec[stu.id]).sort((a,b)=>b.date.localeCompare(a.date)).map(d=>`<div class="row"><span>${d.date}</span><span class="badge ${d.rec[stu.id]}">${d.rec[stu.id]==="P"?"Present":"Absent"}</span></div>`).join("");
+    return`<div class="card"><h3>Attendance History</h3>${rows||'<p class="muted">Abhi koi record nahi.</p>'}</div>`}
+  if(tab==="mark"&&canEdit){
+    const key=selDate+"_"+selCls,rec=(D.att[key]||{}).rec||{};
+    const list=D.students.filter(s=>s.cls===selCls);
+    return`<div class="card"><h3>Attendance Lagayein</h3>
+    <select onchange="selCls=this.value;render()">${CLASSES.map(c=>`<option ${c===selCls?"selected":""}>${c}</option>`).join("")}</select>
+    <input type="date" value="${selDate}" onchange="selDate=this.value;render()">
+    ${list.map(s=>`<div class="row"><span>${s.roll}. ${esc(s.name)}</span><div class="tg">
+      <button class="${rec[s.id]==="P"?"selP":""}" onclick="mark('${s.id}','P')">P</button>
+      <button class="${rec[s.id]==="A"?"selA":""}" onclick="mark('${s.id}','A')">A</button></div></div>`).join("")||'<p class="muted">Is class me koi student nahi.</p>'}
+    ${list.length?`<button class="btn" style="margin-top:10px" onclick="allP()">Sabko Present karein</button>`:""}</div>`}
+  if(tab==="stu"&&me.role==="admin"){
+    return`<div class="card"><h3>Student Add Karein</h3><input id="sn" placeholder="Student ka naam">
+    <select id="sc">${CLASSES.map(c=>`<option>${c}</option>`).join("")}</select><input id="sr" type="number" placeholder="Roll number">
+    <button class="btn" onclick="addStu()">Add</button></div>
+    <div class="card"><h3>Sabhi Students</h3>${D.students.map(s=>`<div class="row"><span>${esc(s.name)} <span class="muted">(Cl ${s.cls}, Roll ${s.roll})</span></span><button class="btn sm red" onclick="delStu('${s.id}')">Delete</button></div>`).join("")||'<p class="muted">Koi student nahi.</p>'}</div>`}
+  if(tab==="acc"&&me.role==="admin"){
+    return`<div class="card"><h3>Naya Login Banayein</h3><input id="an" placeholder="Naam">
+    <input id="au" placeholder="Username" autocapitalize="none"><input id="ap" placeholder="Password (min 6 akshar)">
+    <select id="ar" onchange="$('as').style.display=this.value==='parent'?'block':'none'"><option value="parent">Parent</option><option value="teacher">Teacher</option></select>
+    <select id="as">${D.students.map(s=>`<option value="${s.id}">${esc(s.name)} (Cl ${s.cls})</option>`).join("")}</select>
+    <p class="muted" style="margin-bottom:8px">Parent ke liye bachcha chunein.</p>
+    <button class="btn" onclick="addUser()">Create</button></div>
+    <div class="card"><h3>Sabhi Users</h3>${D.users.map(u=>`<div class="row"><span>${esc(u.name)} <span class="muted">${esc(u.username)} · ${u.role}</span></span></div>`).join("")}
+    <p class="muted" style="margin-top:8px">User hatane ke liye Firebase Console → Authentication use karein.</p></div>`}
+  if(tab==="hw"){
+    const list=D.homework.filter(h=>!isP||h.cls===stu.cls);
+    return(canEdit?`<div class="card"><h3>Homework Dalein</h3><select id="hc">${CLASSES.map(c=>`<option>${c}</option>`).join("")}</select>
+    <input id="hs" placeholder="Subject"><textarea id="ht" rows="3" placeholder="Homework"></textarea><button class="btn" onclick="addHw()">Post</button></div>`:"")+
+    `<div class="card"><h3>Homework</h3>${list.map(h=>`<div class="row"><div><b>${esc(h.subject)}</b> <span class="muted">Class ${h.cls} · ${h.date}</span><br>${esc(h.text)}</div>${canEdit?`<button class="btn sm red" onclick="del('homework','${h.id}')">X</button>`:""}</div>`).join("")||'<p class="muted">Koi homework nahi.</p>'}</div>`}
+  if(tab==="notice"){
+    return(canEdit?`<div class="card"><h3>Notice Dalein</h3><input id="nt" placeholder="Title"><textarea id="nx" rows="3" placeholder="Notice"></textarea><button class="btn" onclick="addNotice()">Post</button></div>`:"")+listNotices(99,canEdit)}
+  if(tab==="event"){
+    return(canEdit?`<div class="card"><h3>Activity / Event Dalein</h3><input id="et" placeholder="Event ka naam"><input id="ed" type="date" value="${today()}"><textarea id="ex" rows="3" placeholder="Detail"></textarea><button class="btn" onclick="addEvent()">Post</button></div>`:"")+
+    `<div class="card"><h3>School Activities</h3>${D.events.map(e=>`<div class="row"><div><b>${esc(e.title)}</b> <span class="muted">${e.date}</span><br>${esc(e.text)}</div>${canEdit?`<button class="btn sm red" onclick="del('events','${e.id}')">X</button>`:""}</div>`).join("")||'<p class="muted">Koi event nahi.</p>'}</div>`}
+  return"";
+}
+
+const fail=e=>alert("Error: "+e.message);
+function mark(sid,v){
+  const key=selDate+"_"+selCls;
+  db.collection("attendance").doc(key).set({date:selDate,cls:selCls,rec:{[sid]:v}},{merge:true}).catch(fail);
+}
+function allP(){
+  const key=selDate+"_"+selCls,rec={};
+  D.students.filter(s=>s.cls===selCls).forEach(s=>rec[s.id]="P");
+  db.collection("attendance").doc(key).set({date:selDate,cls:selCls,rec},{merge:true}).catch(fail);
+}
+function addStu(){const n=$("sn").value.trim();if(!n)return;
+  db.collection("students").add({name:n,cls:$("sc").value,roll:+$("sr").value||0}).then(()=>{$("sn").value="";$("sr").value=""}).catch(fail)}
+function delStu(id){if(confirm("Delete karein?"))db.collection("students").doc(id).delete().catch(fail)}
+async function addUser(){
+  const n=$("an").value.trim(),u=$("au").value.trim().toLowerCase(),p=$("ap").value,r=$("ar").value;
+  if(!n||!u||p.length<6)return alert("Sab bharein (password min 6 akshar)");
+  if(r==="parent"&&!$("as").value)return alert("Pehle student add karein");
+  let sec;
+  try{
+    sec=firebase.apps.find(a=>a.name==="sec")||firebase.initializeApp(firebaseConfig,"sec");
+    const c=await sec.auth().createUserWithEmailAndPassword(u+DOMAIN,p);
+    const o={name:n,username:u,role:r};if(r==="parent")o.sid=$("as").value;
+    await db.collection("users").doc(c.user.uid).set(o);
+    await sec.auth().signOut();
+    alert("Login ban gaya: "+u);
+    ["an","au","ap"].forEach(i=>$(i).value="");
+  }catch(e){fail(e);try{sec&&await sec.auth().signOut()}catch(_){}}
+}
+function addHw(){const t=$("ht").value.trim();if(!t)return;
+  db.collection("homework").add({cls:$("hc").value,subject:$("hs").value||"-",text:t,date:today(),ts:Date.now()}).then(()=>{$("ht").value="";$("hs").value=""}).catch(fail)}
+function addNotice(){const t=$("nt").value.trim();if(!t)return;
+  db.collection("notices").add({title:t,text:$("nx").value,date:today(),ts:Date.now()}).then(()=>{$("nt").value="";$("nx").value=""}).catch(fail)}
+function addEvent(){const t=$("et").value.trim();if(!t)return;
+  db.collection("events").add({title:t,date:$("ed").value,text:$("ex").value,ts:Date.now()}).then(()=>{$("et").value="";$("ex").value=""}).catch(fail)}
+function del(c,id){if(confirm("Delete karein?"))db.collection(c).doc(id).delete().catch(fail)}
+</script>
+</body>
+</html>
